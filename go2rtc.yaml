@@ -1,0 +1,23 @@
+# Kameras: Name (wird auf der Seite angezeigt) -> MJPEG-Stream der ESP32-CAM.
+# Der Stream der Prusa-Firmware braucht kein Passwort.
+# go2rtc holt den Stream nur, solange jemand zuschaut, und verteilt ihn an alle Zuschauer.
+streams:
+  hund: http://192.168.2.134/stream.mjpg
+  # wohnzimmer: http://192.168.2.135/stream.mjpg
+
+api:
+  listen: "127.0.0.1:1984"   # nur intern, Caddy reicht die nötigen Pfade weiter
+  origin: "*"
+
+# nicht benötigte Dienste aus
+rtsp:
+  listen: ""
+webrtc:
+  listen: ""
+srtp:
+  listen: ""
+rtmp:
+  listen: ""
+
+log:
+  level: info

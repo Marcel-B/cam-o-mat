@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hundecam">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Hundecam</title>
+<style>
+  :root {
+    --bg: #111418; --panel: #1b2027; --line: #2a313b;
+    --text: #e8ecf1; --muted: #8b95a3; --accent: #f2a541;
+    --ok: #4cc38a; --warn: #e5534b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent; }
+  body { display: flex; flex-direction: column; min-height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 4px; }
+  h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+  .status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status[data-s="live"] .dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(76,195,138,.2); }
+  .status[data-s="error"] .dot { background: var(--warn); }
+  .status[data-s="loading"] .dot { background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  nav { display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  nav button { flex: none; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    padding: 8px 14px; border-radius: 999px; font: inherit; font-size: 14px; cursor: pointer; }
+  nav button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 600; }
+
+  main { flex: 1; display: flex; flex-direction: column; padding: 8px 16px 16px; gap: 12px; }
+  .viewer { position: relative; background: #000; border-radius: 12px; overflow: hidden;
+    aspect-ratio: 4 / 3; width: 100%; display: grid; place-items: center; }
+  .viewer img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .viewer .msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    padding: 16px; color: var(--muted); font-size: 14px; }
+  .viewer .msg[hidden] { display: none; }
+  .viewer .msg button { margin-top: 10px; }
+  .viewer.rot180 img { transform: rotate(180deg); }
+
+  .controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .controls button, .msg button { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    border-radius: 10px; padding: 10px 4px; font: inherit; font-size: 13px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .controls button:active { transform: scale(.97); }
+  .controls button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .controls svg { width: 22px; height: 22px; }
+  .controls button:disabled { opacity: .4; }
+
+  .empty { color: var(--muted); font-size: 14px; padding: 0 16px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 16px 12px; }
+
+  /* Vollbild / Querformat: nur das Bild */
+  .viewer:fullscreen { border-radius: 0; aspect-ratio: auto; height: 100%; }
+  @media (orientation: landscape) and (max-height: 500px) {
+    header, nav, .controls, footer { display: none; }
+    main { padding: 0; }
+    .viewer { border-radius: 0; aspect-ratio: auto; height: 100dvh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐕 Hundecam</h1>
+  <div class="status" id="status" data-s="loading"><span class="dot"></span><span id="statusText">Verbinde…</span></div>
+</header>
+
+<nav id="cams" aria-label="Kameras"></nav>
+
+<main>
+  <div class="viewer" id="viewer">
+    <img id="stream" alt="Live-Bild">
+    <div class="msg" id="msg"><div><span id="msgText">Lade Kameras…</span></div></div>
+  </div>
+
+  <div class="controls">
+    <button id="btnLight" aria-pressed="false" title="Licht an/aus">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>
+      Licht
+    </button>
+    <button id="btnSnap" title="Foto speichern">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+      Foto
+    </button>
+    <button id="btnRotate" aria-pressed="false" title="Bild drehen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/></svg>
+      Drehen
+    </button>
+    <button id="btnFull" title="Vollbild">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      Vollbild
+    </button>
+  </div>
+</main>
+<footer id="footer"></footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const img = $("stream"), viewer = $("viewer"), msg = $("msg"), msgText = $("msgText");
+  const statusEl = $("status"), statusText = $("statusText"), camsEl = $("cams");
+
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("hundecam." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("hundecam." + k, JSON.stringify(v)); } catch {} },
+  };
+
+  let cams = [];          // Namen der Kameras (aus go2rtc)
+  let current = null;     // aktuell gewählte Kamera
+  let retryTimer = null, retryDelay = 2000;
+  let light = {};         // Lichtstatus pro Kamera (nur lokal gemerkt)
+
+  function setStatus(s, text) { statusEl.dataset.s = s; statusText.textContent = text; }
+  function showMsg(html) { msgText.innerHTML = html; msg.hidden = false; }
+  function hideMsg() { msg.hidden = true; }
+  const label = (name) => name.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  async function loadCams() {
+    try {
+      const r = await fetch("api/streams", { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      cams = Object.keys(await r.json()).sort();
+    } catch (e) {
+      setStatus("error", "Server nicht erreichbar");
+      showMsg('Der Server antwortet nicht.<br><button onclick="location.reload()">Neu laden</button>');
+      return;
+    }
+    if (!cams.length) {
+      setStatus("error", "Keine Kameras");
+      showMsg("In go2rtc.yaml ist noch keine Kamera eingetragen.");
+      return;
+    }
+    camsEl.innerHTML = "";
+    for (const name of cams) {
+      const b = document.createElement("button");
+      b.textContent = label(name);
+      b.dataset.cam = name;
+      b.onclick = () => select(name);
+      camsEl.appendChild(b);
+    }
+    camsEl.hidden = cams.length < 2;
+    const fromHash = decodeURIComponent(location.hash.slice(1));
+    select(cams.includes(fromHash) ? fromHash : cams.includes(store.get("cam")) ? store.get("cam") : cams[0]);
+  }
+
+  function select(name) {
+    current = name;
+    store.set("cam", name);
+    history.replaceState(null, "", "#" + encodeURIComponent(name));
+    for (const b of camsEl.children) b.setAttribute("aria-pressed", String(b.dataset.cam === name));
+    viewer.classList.toggle("rot180", !!store.get("rot." + name, false));
+    $("btnRotate").setAttribute("aria-pressed", String(!!store.get("rot." + name, false)));
+    $("btnLight").setAttribute("aria-pressed", String(!!light[name]));
+    $("footer").textContent = label(name);
+    start();
+  }
+
+  function stop() {
+    clearTimeout(retryTimer);
+    img.removeAttribute("src");   // beendet die Verbindung -> ESP32 streamt nicht unnötig
+  }
+
+  function start() {
+    stop();
+    if (!current || document.hidden) return;
+    setStatus("loading", "Verbinde…");
+    showMsg("Verbinde mit " + label(current) + "…");
+    img.src = "api/stream.mjpeg?src=" + encodeURIComponent(current) + "&t=" + Date.now();
+  }
+
+  img.addEventListener("load", () => {   // erstes Bild angekommen
+    retryDelay = 2000;
+    hideMsg();
+    setStatus("live", "Live");
+  });
+  img.addEventListener("error", () => {
+    if (!img.getAttribute("src")) return;
+    setStatus("error", "Offline");
+    showMsg(label(current) + " ist gerade nicht erreichbar.<br>Neuer Versuch in " + Math.round(retryDelay / 1000) + " s…");
+    retryTimer = setTimeout(start, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 30000);
+  });
+
+  // Stream pausieren, wenn die App im Hintergrund ist (spart Akku, Datenvolumen und den ESP32)
+  document.addEventListener("visibilitychange", () => document.hidden ? stop() : start());
+
+  $("btnLight").onclick = async (ev) => {
+    const btn = ev.currentTarget;
+    const on = !light[current];
+    btn.disabled = true;
+    try {
+      const r = await fetch("cam/" + encodeURIComponent(current) + "/light?" + (on ? "on" : "off"), { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      light[current] = on;
+      btn.setAttribute("aria-pressed", String(on));
+    } catch {
+      setStatus("error", "Licht nicht schaltbar");
+      setTimeout(() => statusEl.dataset.s === "error" && img.complete && start(), 2500);
+    } finally { btn.disabled = false; }
+  };
+
+  $("btnSnap").onclick = () => {
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    a.href = "api/frame.jpeg?src=" + encodeURIComponent(current) + "&t=" + Date.now();
+    a.download = current + "-" + ts + ".jpg";
+    a.target = "_blank";
+    a.click();
+  };
+
+  $("btnRotate").onclick = (ev) => {
+    const on = !store.get("rot." + current, false);
+    store.set("rot." + current, on);
+    viewer.classList.toggle("rot180", on);
+    ev.currentTarget.setAttribute("aria-pressed", String(on));
+  };
+
+  $("btnFull").onclick = () => {
+    const el = viewer;
+    if (document.fullscreenElement) return document.exitFullscreen();
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (img.webkitEnterFullscreen) img.webkitEnterFullscreen();
+    else window.open(img.src, "_blank");  // iPhone-Safari: kein Element-Vollbild -> Bild im neuen Tab
+  };
+
+  window.addEventListener("hashchange", () => {
+    const n = decodeURIComponent(location.hash.slice(1));
+    if (cams.includes(n) && n !== current) select(n);
+  });
+
+  loadCams();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+# Hundecam: Tailscale + go2rtc + Caddy
+# Alle drei Container teilen sich das Netzwerk des Tailscale-Containers.
+# Erreichbar ist die Seite NUR im Tailnet: https://hundecam.<dein-tailnet>.ts.net
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: hundecam
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+      - TS_USERSPACE=true
+    volumes:
+      - ./tailscale-state:/var/lib/tailscale
+      - ./serve.json:/config/serve.json:ro
+    restart: unless-stopped
+
+  go2rtc:
+    image: alexxit/go2rtc:latest
+    network_mode: service:tailscale
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    network_mode: service:tailscale
+    environment:
+      - CAM_BASIC_AUTH=${CAM_BASIC_AUTH:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv:ro
+    restart: unless-stopped

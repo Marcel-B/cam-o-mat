@@ -1,0 +1,39 @@
+{
+	admin off
+	auto_https off
+}
+
+# Licht-Schalter pro Kamera: import cam <name> <ip>
+# <name> muss genauso heißen wie in go2rtc.yaml.
+(cam) {
+	handle_path /cam/{args[0]}/* {
+		@light path /light
+		handle @light {
+			reverse_proxy {args[1]} {
+				# Basic Auth der Kamera (falls in der Firmware aktiviert), siehe .env
+				header_up Authorization "Basic {$CAM_BASIC_AUTH}"
+			}
+		}
+		respond 404
+	}
+}
+
+:8080 {
+	encode gzip
+
+	import cam hund 192.168.2.134
+	# import cam wohnzimmer 192.168.2.135
+
+	# Nur die lesenden go2rtc-Endpunkte freigeben (keine Konfig-Änderungen von außen)
+	@go2rtc path /api/streams /api/stream.mjpeg /api/frame.jpeg
+	handle @go2rtc {
+		reverse_proxy 127.0.0.1:1984 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		root * /srv
+		file_server
+	}
+}
