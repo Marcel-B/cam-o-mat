@@ -221,9 +221,10 @@ update() {
     info "Aktualisiere cam-o-mat in Container $CTID"
     hole_stand
     compose pull -q
+    # Caddy und go2rtc lesen ihre Konfig nur beim Start, und git ersetzt die eingebundenen Dateien
+    # (neue Inodes): deshalb go2rtc und caddy neu anlegen, nicht nur neu starten.
     compose up -d --remove-orphans >/dev/null
-    # Caddy und go2rtc lesen ihre Konfig nur beim Start; nach einer Kamera-Änderung also neu starten.
-    compose restart go2rtc caddy >/dev/null
+    compose up -d --force-recreate --no-deps go2rtc caddy >/dev/null
     im_ct docker image prune -f >/dev/null
     pruefen
 }
