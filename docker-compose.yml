@@ -4,7 +4,7 @@
 services:
   tailscale:
     image: tailscale/tailscale:latest
-    hostname: hundecam
+    hostname: ${TS_HOSTNAME:-cam-o-mat}
     environment:
       - TS_AUTHKEY=${TS_AUTHKEY}
       - TS_STATE_DIR=/var/lib/tailscale
