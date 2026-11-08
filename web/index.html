@@ -108,7 +108,8 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const img = $("stream"), viewer = $("viewer"), msg = $("msg"), msgText = $("msgText");
+  let img = $("stream");
+  const viewer = $("viewer"), msg = $("msg"), msgText = $("msgText");
   const statusEl = $("status"), statusText = $("statusText"), camsEl = $("cams");
 
   const store = {
@@ -119,6 +120,7 @@
   let cams = [];          // Namen der Kameras (aus go2rtc)
   let current = null;     // aktuell gewählte Kamera
   let retryTimer = null, retryDelay = 2000;
+  let watchTimer = null, startedAt = 0, live = false;
   let light = {};         // Lichtstatus pro Kamera (nur lokal gemerkt)
 
   function setStatus(s, text) { statusEl.dataset.s = s; statusText.textContent = text; }
@@ -168,7 +170,18 @@
 
   function stop() {
     clearTimeout(retryTimer);
-    img.removeAttribute("src");   // beendet die Verbindung -> ESP32 streamt nicht unnötig
+    clearInterval(watchTimer);
+    live = false;
+    // Verbindung beenden (sonst streamt der ESP32 weiter) und für den nächsten Versuch ein frisches <img> nehmen:
+    // Chrome schickt sonst keinen neuen Request, solange der alte noch auf das erste Bild wartet.
+    img.removeAttribute("src");
+    const neu = document.createElement("img");
+    neu.id = "stream";
+    neu.alt = "Live-Bild";
+    neu.addEventListener("load", markLive);
+    neu.addEventListener("error", onError);
+    img.replaceWith(neu);
+    img = neu;
   }
 
   function start() {
@@ -177,20 +190,38 @@
     setStatus("loading", "Verbinde…");
     showMsg("Verbinde mit " + label(current) + "…");
     img.src = "api/stream.mjpeg?src=" + encodeURIComponent(current) + "&t=" + Date.now();
+    // Safari meldet bei MJPEG-Streams kein "load". Deshalb nachsehen, ob schon ein Bild da ist.
+    startedAt = Date.now();
+    watchTimer = setInterval(() => {
+      if (img.naturalWidth > 0) return markLive();
+      if (Date.now() - startedAt > 15000) fail("Von " + label(current) + " kommen keine Bilder.");
+    }, 500);
   }
 
-  img.addEventListener("load", () => {   // erstes Bild angekommen
+  function markLive(ev) {
+    if (ev && ev.target !== img) return;
+    clearInterval(watchTimer);
+    if (live) return;
+    live = true;
     retryDelay = 2000;
     hideMsg();
     setStatus("live", "Live");
-  });
-  img.addEventListener("error", () => {
-    if (!img.getAttribute("src")) return;
+  }
+
+  function fail(text) {
+    stop();
     setStatus("error", "Offline");
-    showMsg(label(current) + " ist gerade nicht erreichbar.<br>Neuer Versuch in " + Math.round(retryDelay / 1000) + " s…");
+    showMsg(text + "<br>Neuer Versuch in " + Math.round(retryDelay / 1000) + " s…");
     retryTimer = setTimeout(start, retryDelay);
     retryDelay = Math.min(retryDelay * 2, 30000);
-  });
+  }
+
+  function onError(ev) {
+    if (ev.target !== img || !img.getAttribute("src")) return;
+    fail(label(current) + " ist gerade nicht erreichbar.");
+  }
+  img.addEventListener("load", markLive);
+  img.addEventListener("error", onError);
 
   // Stream pausieren, wenn die App im Hintergrund ist (spart Akku, Datenvolumen und den ESP32)
   document.addEventListener("visibilitychange", () => document.hidden ? stop() : start());
