@@ -7,6 +7,7 @@
 set -Eeuo pipefail
 
 REPO_URL="${REPO_URL:-https://github.com/Marcel-B/cam-o-mat.git}"
+REPO_BRANCH_GESETZT="${REPO_BRANCH:+1}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 APP_DIR=/opt/cam-o-mat
 
@@ -165,6 +166,8 @@ anlegen() {
 
 hole_stand() {
     if im_ct test -d "$APP_DIR/.git"; then
+        # Ohne REPO_BRANCH bleibt ein vorhandener Checkout auf seinem Zweig.
+        [[ -n $REPO_BRANCH_GESETZT ]] || REPO_BRANCH=$(im_ct git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)
         im_ct git -C "$APP_DIR" fetch -q origin "$REPO_BRANCH"
         im_ct git -C "$APP_DIR" checkout -q -B "$REPO_BRANCH" FETCH_HEAD
     else
