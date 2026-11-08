@@ -249,7 +249,7 @@ pruefen() {
         else
             warn "Kamera $name antwortet nicht: $url (an? feste IP im Router?)"
         fi
-    done < <(im_ct sed -n '/^streams:/,/^[^ #]/{s/^  \([A-Za-z0-9_-]*\): *\(http[^ ]*\).*/\1: \2/p}' "$APP_DIR/go2rtc.yaml")
+    done < <(im_ct sed -n '/^streams:/,/^[^ #]/{s/^  \([A-Za-z0-9_-]*\):.*\(http:\/\/[^ ]*\).*/\1: \2/p}' "$APP_DIR/go2rtc.yaml")
 
     # Antwortet die Seite (Caddy -> go2rtc) im Netz des Tailscale-Containers?
     local streams=""

@@ -53,7 +53,7 @@ Für jede Kamera eine Zeile in `go2rtc.yaml` und eine in `Caddyfile`, beide mit 
 
 ```yaml
 # go2rtc.yaml
-  wohnzimmer: http://192.168.2.135/stream.mjpg
+  wohnzimmer: exec:sh /config/esp-mjpeg.sh http://192.168.2.135/stream.mjpg
 ```
 ```
 # Caddyfile

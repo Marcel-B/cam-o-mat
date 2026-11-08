@@ -20,6 +20,7 @@ services:
     network_mode: service:tailscale
     volumes:
       - ./go2rtc.yaml:/config/go2rtc.yaml:ro
+      - ./esp-mjpeg.sh:/config/esp-mjpeg.sh:ro
     restart: unless-stopped
 
   caddy:
