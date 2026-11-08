@@ -61,12 +61,18 @@
   .empty { color: var(--muted); font-size: 14px; padding: 0 16px; }
   footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 16px 12px; }
 
-  /* Vollbild / Querformat: nur das Bild */
+  /* Vollbild: echtes Vollbild, wo der Browser es kann; sonst (iPhone) füllt das Bild die Seite.
+     Antippen beendet es. */
   .viewer:fullscreen { border-radius: 0; aspect-ratio: auto; height: 100%; }
-  @media (orientation: landscape) and (max-height: 500px) {
-    header, nav, .controls, footer { display: none; }
-    main { padding: 0; }
-    .viewer { border-radius: 0; aspect-ratio: auto; height: 100dvh; }
+  .viewer.full { position: fixed; inset: 0; z-index: 10; border-radius: 0; aspect-ratio: auto;
+    height: 100dvh; width: 100vw; }
+  .viewer .hint { position: absolute; top: calc(env(safe-area-inset-top) + 8px); right: 12px; font-size: 12px;
+    color: #fff; background: rgba(0,0,0,.5); padding: 4px 10px; border-radius: 999px; display: none; }
+  .viewer.full .hint { display: block; }
+
+  /* Großer Bildschirm: nicht breiter als nötig */
+  @media (min-width: 900px) {
+    header, nav, main, footer { width: 100%; max-width: 860px; margin-left: auto; margin-right: auto; }
   }
 </style>
 </head>
@@ -82,6 +88,7 @@
   <div class="viewer" id="viewer">
     <img id="stream" alt="Live-Bild">
     <div class="msg" id="msg"><div><span id="msgText">Lade Kameras…</span></div></div>
+    <div class="hint">Antippen zum Schließen</div>
   </div>
 
   <div class="controls">
@@ -258,12 +265,18 @@
   };
 
   $("btnFull").onclick = () => {
-    const el = viewer;
     if (document.fullscreenElement) return document.exitFullscreen();
-    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
-    else if (img.webkitEnterFullscreen) img.webkitEnterFullscreen();
-    else window.open(img.src, "_blank");  // iPhone-Safari: kein Element-Vollbild -> Bild im neuen Tab
+    if (viewer.requestFullscreen && document.fullscreenEnabled) {
+      viewer.requestFullscreen().catch(() => viewer.classList.add("full"));
+    } else {
+      viewer.classList.add("full");   // iPhone-Safari kann kein Element-Vollbild
+    }
   };
+  viewer.addEventListener("click", (ev) => {
+    if (ev.target.closest("button")) return;
+    if (viewer.classList.contains("full")) viewer.classList.remove("full");
+    else if (document.fullscreenElement) document.exitFullscreen();
+  });
 
   window.addEventListener("hashchange", () => {
     const n = decodeURIComponent(location.hash.slice(1));
