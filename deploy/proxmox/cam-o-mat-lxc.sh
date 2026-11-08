@@ -43,14 +43,19 @@ hilfe() {
     cat <<EOF
 cam-o-mat (Hundecam) in einem Proxmox-LXC-Container installieren oder aktualisieren (auf dem PVE-Host als root).
 
-Aufruf: $AUFRUF [-y] [anlegen | app <CTID> | update <CTID> | pruefen <CTID> | logs <CTID>]
+Aufruf: $AUFRUF [-y] [anlegen | app | update | pruefen | logs | kamera … | autoupdate …]  (jeweils optional <CTID>)
 
   (ohne)          alles der Reihe nach: anlegen, app
   anlegen         Schritt 1: Container anlegen (oder den namens $CT_HOSTNAME nehmen) und Docker installieren
   app <CTID>      Schritt 2: cam-o-mat holen, .env mit Tailscale-Auth-Key anlegen, starten, prüfen
-  update <CTID>   git pull, neue Abbilder holen, neu starten; .env und Tailscale-Login bleiben
+  update <CTID>   git pull, Images von ghcr.io holen, neu starten; .env, Kameras und Tailscale-Login bleiben
   pruefen <CTID>  Container, Kameras und Tailnet-Adresse prüfen
-  logs <CTID>     die letzten Zeilen von tailscale, go2rtc und caddy
+  logs <CTID>     die letzten Zeilen von tailscale, go2rtc und web
+  kamera [<CTID>] list | add <name> <ip> | rm <name>
+                  Kameras verwalten (kameras.conf im Container), danach neu starten
+  autoupdate [<CTID>] [on|off|status|run]
+                  alle 5 Minuten main holen, wenn neu, und neue Images ziehen
+                  (systemd-Timer cam-o-mat-update; app schaltet es ein)
   -y              ohne Rückfragen, Werte aus Umgebungsvariablen
 
 Variablen (Vorgabe): CTID (nächste freie bzw. Container namens cam-o-mat), CT_HOSTNAME (cam-o-mat),
@@ -58,7 +63,7 @@ TS_HOSTNAME (wie CT_HOSTNAME, Name im Tailnet), CORES (1), MEMORY (512), DISK (4
 IP (dhcp, sonst z. B. 192.168.2.60/24), GATEWAY, CT_STORAGE, TEMPLATE_STORAGE, TS_AUTHKEY,
 CAM_BASIC_AUTH (base64 von benutzer:passwort der Kamera), REPO_URL, REPO_BRANCH (main).
 
-Kameras stehen in go2rtc.yaml und Caddyfile im Repository; nach einer Änderung dort: update.
+Beispiel: $AUFRUF kamera add wohnzimmer 192.168.2.140
 EOF
 }
 
@@ -211,51 +216,112 @@ app() {
     info "Schritt 2: cam-o-mat in Container $CTID"
     hole_stand
     schreibe_env
-    info "Hole Abbilder und starte"
-    compose pull -q
+    im_ct bash "$APP_DIR/kameras.sh" gen
+    info "Hole Images und starte"
+    hole_images
     compose up -d --remove-orphans >/dev/null
     pruefen
+    autoupdate on
+}
+
+# Images von ghcr.io; geht das nicht (Pakete noch privat?), hier bauen.
+hole_images() {
+    if ! compose pull -q 2>/dev/null; then
+        warn "Images von ghcr.io nicht ladbar (Pakete öffentlich gestellt?), baue sie im Container"
+        compose pull -q tailscale || true
+        compose build -q
+    fi
 }
 
 update() {
     info "Aktualisiere cam-o-mat in Container $CTID"
     hole_stand
-    compose pull -q
-    # Caddy und go2rtc lesen ihre Konfig nur beim Start, und git ersetzt die eingebundenen Dateien
-    # (neue Inodes): deshalb go2rtc und caddy neu anlegen, nicht nur neu starten.
+    im_ct bash "$APP_DIR/kameras.sh" gen
+    hole_images
+    # go2rtc und web lesen generated/ nur beim Start: neu anlegen.
     compose up -d --remove-orphans >/dev/null
-    compose up -d --force-recreate --no-deps go2rtc caddy >/dev/null
+    compose up -d --force-recreate --no-deps go2rtc web >/dev/null
     im_ct docker image prune -f >/dev/null
     pruefen
 }
 
-logs() { compose logs --tail 30 tailscale go2rtc caddy; }
+logs() { compose logs --tail 30 tailscale go2rtc web; }
+
+kamera() {
+    im_ct bash "$APP_DIR/kameras.sh" "${KAMERA_ARGS[@]+"${KAMERA_ARGS[@]}"}"
+}
+
+# Der Timer ruft update-in-ct.sh aus dem Checkout auf; so kommt mit jedem Update auch dessen neue Fassung.
+autoupdate() {
+    case ${1:-on} in
+        on)
+            im_ct bash -c "cat > /etc/systemd/system/cam-o-mat-update.service <<'UNIT'
+[Unit]
+Description=cam-o-mat: main holen und neue Images ziehen
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash $APP_DIR/deploy/proxmox/update-in-ct.sh
+UNIT
+cat > /etc/systemd/system/cam-o-mat-update.timer <<'UNIT'
+[Unit]
+Description=cam-o-mat: Auto-Update alle 5 Minuten
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload && systemctl enable --now cam-o-mat-update.timer >/dev/null"
+            local zweig
+            zweig=$(im_ct git -C "$APP_DIR" rev-parse --abbrev-ref HEAD)
+            ok "Auto-Update an: alle 5 Minuten (Log: pct exec $CTID -- journalctl -u cam-o-mat-update)"
+            [[ $zweig == main ]] || warn "Der Checkout steht auf $zweig; das Auto-Update greift erst auf main ($AUFRUF update mit REPO_BRANCH=main)"
+            ;;
+        off)
+            im_ct bash -c 'systemctl disable --now cam-o-mat-update.timer >/dev/null 2>&1; rm -f /etc/systemd/system/cam-o-mat-update.{service,timer}; systemctl daemon-reload'
+            ok "Auto-Update aus"
+            ;;
+        status)
+            im_ct systemctl list-timers cam-o-mat-update.timer --no-pager || true
+            im_ct journalctl -u cam-o-mat-update -n 15 --no-pager || true
+            ;;
+        run)
+            im_ct systemctl start cam-o-mat-update.service
+            im_ct journalctl -u cam-o-mat-update -n 15 --no-pager || true
+            ;;
+        *) abbruch "autoupdate: on, off, status oder run" ;;
+    esac
+}
 
 pruefen() {
     info "Prüfe"
     local laufend
     laufend=$(compose ps --status running --services 2>/dev/null | tr '\n' ' ' || true)
-    for dienst in caddy go2rtc tailscale; do
+    for dienst in web go2rtc tailscale; do
         if [[ " $laufend " == *" $dienst "* ]]; then ok "$dienst läuft"; else warn "$dienst läuft nicht ($AUFRUF logs $CTID)"; fi
     done
 
-    # Kameras aus go2rtc.yaml im Heimnetz erreichbar?
-    local zeile name url code
-    while IFS= read -r zeile; do
-        name=${zeile%%:*}
-        url=${zeile#*: }
-        code=$(im_ct curl -s --max-time 5 -o /dev/null -w '%{http_code}' "${url%/stream.mjpg}/" 2>/dev/null || true)
+    # Kameras aus kameras.conf im Heimnetz erreichbar?
+    local name ip code
+    while read -r name ip; do
+        [[ -n $name ]] || continue
+        code=$(im_ct curl -s --max-time 5 -o /dev/null -w '%{http_code}' "http://$ip/" 2>/dev/null || true)
         if [[ -n $code && $code != 000 ]]; then
-            ok "Kamera $name erreichbar (${url%/stream.mjpg})"
+            ok "Kamera $name erreichbar ($ip)"
         else
-            warn "Kamera $name antwortet nicht: $url (an? feste IP im Router?)"
+            warn "Kamera $name antwortet nicht: $ip (an? feste IP im Router?)"
         fi
-    done < <(im_ct sed -n '/^streams:/,/^[^ #]/{s/^  \([A-Za-z0-9_-]*\):.*\(http:\/\/[^ ]*\).*/\1: \2/p}' "$APP_DIR/go2rtc.yaml")
+    done < <(im_ct bash "$APP_DIR/kameras.sh" list 2>/dev/null)
 
     # Antwortet die Seite (Caddy -> go2rtc) im Netz des Tailscale-Containers?
     local streams=""
     for _ in $(seq 1 15); do
-        streams=$(compose exec -T caddy wget -qO- http://127.0.0.1:8080/api/streams 2>/dev/null) && break
+        streams=$(compose exec -T web wget -qO- http://127.0.0.1:8080/api/streams 2>/dev/null) && break
         sleep 2
     done
     if [[ -n $streams ]]; then ok "Seite und go2rtc antworten"; else warn "Seite antwortet nicht ($AUFRUF logs $CTID)"; fi
@@ -269,7 +335,7 @@ pruefen() {
     done
     echo >&2
     if [[ -n $name_ts ]]; then
-        ok "Hundecam: https://$name_ts   (nur im Tailnet; das erste Laden holt das Zertifikat und dauert etwas)"
+        ok "cam-o-mat: https://$name_ts   (nur im Tailnet; das erste Laden holt das Zertifikat und dauert etwas)"
     else
         warn "Tailscale ist noch nicht angemeldet. Auth-Key prüfen: $AUFRUF logs $CTID"
     fi
@@ -284,7 +350,24 @@ while [[ $# -gt 0 ]]; do
         -h | --help) hilfe; exit 0 ;;
         -y) NICHT_FRAGEN=1 ;;
         anlegen) SCHRITT=$1 ;;
-        app | update | pruefen | logs)
+        on | off | status | run)
+            [[ ${SCHRITT:-} == autoupdate ]] || { hilfe; abbruch "Unbekannt: $1"; }
+            AKTION=$1
+            ;;
+        kamera)
+            SCHRITT=kamera
+            if [[ $# -ge 2 && $2 =~ ^[0-9]+$ ]]; then
+                CTID=$2
+                shift
+            else
+                CTID=$(ct_nach_name)
+            fi
+            [[ -n ${CTID:-} ]] || abbruch "kamera braucht die Container-ID"
+            shift
+            KAMERA_ARGS=("$@")
+            break
+            ;;
+        app | update | pruefen | logs | autoupdate)
             SCHRITT=$1
             if [[ $# -ge 2 && $2 =~ ^[0-9]+$ ]]; then
                 CTID=$2
@@ -305,5 +388,7 @@ case $SCHRITT in
     update) update ;;
     pruefen) pruefen ;;
     logs) logs ;;
+    kamera) kamera ;;
+    autoupdate) autoupdate "${AKTION:-on}" ;;
     alles) anlegen; app ;;
 esac

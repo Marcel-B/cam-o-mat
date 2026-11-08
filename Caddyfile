@@ -4,7 +4,7 @@
 }
 
 # Licht-Schalter pro Kamera: import cam <name> <ip>
-# <name> muss genauso heißen wie in go2rtc.yaml.
+# Die Zeilen dazu schreibt kameras.sh nach generated/kameras.caddy.
 (cam) {
 	handle_path /cam/{args[0]}/* {
 		@light path /light
@@ -21,8 +21,7 @@
 :8080 {
 	encode gzip
 
-	import cam hund 192.168.2.134
-	# import cam wohnzimmer 192.168.2.135
+	import /etc/caddy/generated/*.caddy
 
 	# Nur die lesenden go2rtc-Endpunkte freigeben (keine Konfig-Änderungen von außen)
 	@go2rtc path /api/streams /api/stream.mjpeg /api/frame.jpeg

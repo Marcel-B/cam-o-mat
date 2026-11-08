@@ -1,6 +1,8 @@
-# Hundecam: Tailscale + go2rtc + Caddy
+# cam-o-mat: Tailscale + go2rtc + Caddy
 # Alle drei Container teilen sich das Netzwerk des Tailscale-Containers.
-# Erreichbar ist die Seite NUR im Tailnet: https://hundecam.<dein-tailnet>.ts.net
+# Erreichbar ist die Seite NUR im Tailnet: https://cam-o-mat.<dein-tailnet>.ts.net
+# Die Images baut GitHub Actions (ghcr.io); "docker compose up -d --build" baut sie stattdessen hier.
+# Die Kameras stehen in kameras.conf (./kameras.sh), daraus entsteht generated/.
 services:
   tailscale:
     image: tailscale/tailscale:latest
@@ -16,19 +18,23 @@ services:
     restart: unless-stopped
 
   go2rtc:
-    image: alexxit/go2rtc:latest
+    image: ghcr.io/marcel-b/cam-o-mat-go2rtc:latest
+    build:
+      context: .
+      dockerfile: docker/go2rtc/Dockerfile
     network_mode: service:tailscale
     volumes:
-      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
-      - ./esp-mjpeg.sh:/config/esp-mjpeg.sh:ro
+      - ./generated:/config/generated:ro
     restart: unless-stopped
 
-  caddy:
-    image: caddy:2-alpine
+  web:
+    image: ghcr.io/marcel-b/cam-o-mat-web:latest
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
     network_mode: service:tailscale
     environment:
       - CAM_BASIC_AUTH=${CAM_BASIC_AUTH:-}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./web:/srv:ro
+      - ./generated:/etc/caddy/generated:ro
     restart: unless-stopped

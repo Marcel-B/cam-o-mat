@@ -1,2 +1,4 @@
 .env
 tailscale-state/
+kameras.conf
+generated/

@@ -1,14 +1,10 @@
-# Kameras: Name (wird auf der Seite angezeigt) -> MJPEG-Stream der ESP32-CAM.
-# Der Stream der Prusa-Firmware braucht kein Passwort. Er geht über esp-mjpeg.sh, weil go2rtc
-# den Stream der Firmware direkt nicht versteht (fehlende Boundary vor dem ersten Bild).
-# go2rtc holt den Stream nur, solange jemand zuschaut, und verteilt ihn an alle Zuschauer.
-streams:
-  hund: exec:sh /config/esp-mjpeg.sh http://192.168.2.134/stream.mjpg
-  # wohnzimmer: exec:sh /config/esp-mjpeg.sh http://192.168.2.135/stream.mjpg
+# Grundeinstellungen von go2rtc. Die Kameras stehen nicht hier, sondern in kameras.conf;
+# kameras.sh macht daraus generated/kameras.yaml, die go2rtc zusätzlich lädt.
+# Gestreamt wird über esp-mjpeg.sh, weil go2rtc den Stream der Prusa-Firmware direkt nicht versteht
+# (fehlende Boundary vor dem ersten Bild). go2rtc holt den Stream nur, solange jemand zuschaut.
 
 api:
   listen: "127.0.0.1:1984"   # nur intern, Caddy reicht die nötigen Pfade weiter
-  origin: "*"
 
 # nicht benötigte Dienste aus
 rtsp:
