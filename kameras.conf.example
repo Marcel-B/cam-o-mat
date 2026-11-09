@@ -1,4 +1,4 @@
-# Kameras von cam-o-mat: eine Zeile pro Kamera, "name ip".
-# Der Name erscheint auf der Seite (aus wohnzimmer wird "Wohnzimmer").
-# Ändern am besten mit ./kameras.sh add|rm, das schreibt auch die Konfig neu.
-hund 192.168.2.134
+# Kameras von cam-o-mat: eine Zeile pro Kamera, "name ip [Anzeigename]".
+# Ohne Anzeigename erscheint der Name auf der Seite (aus wohnzimmer wird "Wohnzimmer").
+# Ändern am besten mit ./kameras.sh add|rm oder "Kamera hinzufügen" auf der Seite, das schreibt auch die Konfig neu.
+hund 192.168.2.134 Hund

@@ -50,8 +50,8 @@ Aufruf: $AUFRUF [-y] [anlegen | app | update | pruefen | logs | kamera … | aut
   app <CTID>      Schritt 2: cam-o-mat holen, .env mit Tailscale-Auth-Key anlegen, starten, prüfen
   update <CTID>   git pull, Images von ghcr.io holen, neu starten; .env, Kameras und Tailscale-Login bleiben
   pruefen <CTID>  Container, Kameras und Tailnet-Adresse prüfen
-  logs <CTID>     die letzten Zeilen von tailscale, go2rtc und web
-  kamera [<CTID>] list | add <name> <ip> | rm <name>
+  logs <CTID>     die letzten Zeilen von tailscale, go2rtc, web und verwaltung
+  kamera [<CTID>] list | add <name> <ip> [Anzeigename] | rm <name>
                   Kameras verwalten (kameras.conf im Container), danach neu starten
   autoupdate [<CTID>] [on|off|status|run]
                   alle 5 Minuten main holen, wenn neu, und neue Images ziehen
@@ -245,7 +245,7 @@ update() {
     pruefen
 }
 
-logs() { compose logs --tail 30 tailscale go2rtc web; }
+logs() { compose logs --tail 30 tailscale go2rtc web verwaltung; }
 
 kamera() {
     im_ct bash "$APP_DIR/kameras.sh" "${KAMERA_ARGS[@]+"${KAMERA_ARGS[@]}"}"
@@ -302,13 +302,13 @@ pruefen() {
     info "Prüfe"
     local laufend
     laufend=$(compose ps --status running --services 2>/dev/null | tr '\n' ' ' || true)
-    for dienst in web go2rtc tailscale; do
+    for dienst in web go2rtc verwaltung tailscale; do
         if [[ " $laufend " == *" $dienst "* ]]; then ok "$dienst läuft"; else warn "$dienst läuft nicht ($AUFRUF logs $CTID)"; fi
     done
 
     # Kameras aus kameras.conf im Heimnetz erreichbar?
     local name ip code
-    while read -r name ip; do
+    while read -r name ip _; do
         [[ -n $name ]] || continue
         code=$(im_ct curl -s --max-time 5 -o /dev/null -w '%{http_code}' "http://$ip/" 2>/dev/null || true)
         if [[ -n $code && $code != 000 ]]; then

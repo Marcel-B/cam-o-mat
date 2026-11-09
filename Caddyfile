@@ -3,25 +3,8 @@
 	auto_https off
 }
 
-# Licht-Schalter pro Kamera: import cam <name> <ip>
-# Die Zeilen dazu schreibt kameras.sh nach generated/kameras.caddy.
-(cam) {
-	handle_path /cam/{args[0]}/* {
-		@light path /light
-		handle @light {
-			reverse_proxy {args[1]} {
-				# Basic Auth der Kamera (falls in der Firmware aktiviert), siehe .env
-				header_up Authorization "Basic {$CAM_BASIC_AUTH}"
-			}
-		}
-		respond 404
-	}
-}
-
 :8080 {
 	encode gzip
-
-	import /etc/caddy/generated/*.caddy
 
 	# Nur die lesenden go2rtc-Endpunkte freigeben (keine Konfig-Änderungen von außen)
 	@go2rtc path /api/streams /api/stream.mjpeg /api/frame.jpeg
@@ -30,6 +13,15 @@
 			flush_interval -1
 		}
 	}
+
+	# Kameras eintragen (Kamera hinzufügen) und Licht schalten: verwaltung.py
+	@verwaltung path /api/kameras /cam/*/light
+	handle @verwaltung {
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	# Firmware für "Kamera hinzufügen" nicht zwischenspeichern, damit nach einem Update die neue kommt
+	header /firmware/* Cache-Control no-cache
 
 	handle {
 		root * /srv
