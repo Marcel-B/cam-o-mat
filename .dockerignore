@@ -1,0 +1,6 @@
+.git
+.env
+tailscale-state
+generated
+kameras.conf
+docs
