@@ -2,7 +2,7 @@
 # Alle drei Container teilen sich das Netzwerk des Tailscale-Containers.
 # Erreichbar ist die Seite NUR im Tailnet: https://cam-o-mat.<dein-tailnet>.ts.net
 # Die Images baut GitHub Actions (ghcr.io); "docker compose up -d --build" baut sie stattdessen hier.
-# Die Kameras stehen in kameras.conf (./kameras.sh), daraus entsteht generated/.
+# Die Kameras stehen in kameras.conf (./kameras.sh oder "Kamera hinzufügen" auf der Seite), daraus entsteht generated/.
 services:
   tailscale:
     image: tailscale/tailscale:latest
@@ -33,8 +33,21 @@ services:
       context: .
       dockerfile: docker/web/Dockerfile
     network_mode: service:tailscale
+    restart: unless-stopped
+
+  # Trägt Kameras ein ("Kamera hinzufügen" auf der Seite) und schaltet das Licht. Selbes Image wie go2rtc.
+  verwaltung:
+    image: ghcr.io/marcel-b/cam-o-mat-go2rtc:latest
+    command: ["python3", "-u", "/app/verwaltung.py"]
+    network_mode: service:tailscale
     environment:
       - CAM_BASIC_AUTH=${CAM_BASIC_AUTH:-}
     volumes:
-      - ./generated:/etc/caddy/generated:ro
+      # kameras.conf muss es geben (kameras.sh legt sie an), sonst würde Docker ein Verzeichnis daraus machen
+      - type: bind
+        source: ./kameras.conf
+        target: /data/kameras.conf
+        bind:
+          create_host_path: false
+      - ./generated:/data/generated
     restart: unless-stopped

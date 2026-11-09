@@ -58,6 +58,46 @@
   .controls svg { width: 22px; height: 22px; }
   .controls button:disabled { opacity: .4; }
 
+  nav button.add { color: var(--accent); border-style: dashed; }
+
+  /* Kamera hinzufügen */
+  dialog { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 14px;
+    padding: 0; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog [hidden] { display: none !important; }
+  dialog .inhalt { padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+  dialog h2 { font-size: 17px; margin: 0; }
+  dialog p { margin: 0; font-size: 14px; color: var(--muted); }
+  dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  dialog label.check { flex-direction: row; align-items: flex-start; gap: 8px; color: var(--text); font-size: 14px; }
+  dialog label.check input { margin-top: 3px; accent-color: var(--accent); }
+  dialog input[type=text], dialog input[type=password] { font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; }
+  dialog input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  dialog small { font-size: 12px; color: var(--muted); }
+  dialog .knoepfe { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  dialog .knoepfe button { font: inherit; font-size: 14px; border-radius: 10px; padding: 9px 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  dialog .knoepfe button.haupt { background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 600; }
+  dialog .knoepfe button:disabled { opacity: .4; cursor: default; }
+  dialog .box { font-size: 13px; border-radius: 8px; padding: 9px 10px; background: var(--bg); color: var(--muted); }
+  dialog .box.warn { color: var(--accent); border: 1px solid rgba(242,165,65,.4); }
+  dialog .box[hidden] { display: none; }
+  dialog ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  dialog ol li { display: grid; grid-template-columns: 20px 1fr; column-gap: 8px; font-size: 14px; }
+  dialog ol li::before { content: "○"; color: var(--muted); grid-row: span 2; }
+  dialog ol li[data-z="laeuft"]::before { content: "◐"; color: var(--accent); animation: pulse 1s infinite; }
+  dialog ol li[data-z="ok"]::before { content: "✓"; color: var(--ok); }
+  dialog ol li[data-z="fehler"]::before { content: "✕"; color: var(--warn); }
+  dialog ol li[data-z="fehler"] small { color: var(--warn); }
+  dialog ol li[data-z="aus"] { opacity: .45; }
+  dialog progress { width: 100%; accent-color: var(--accent); }
+  dialog progress[hidden] { display: none; }
+  dialog details summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+  dialog pre { font-size: 11px; max-height: 160px; overflow: auto; background: #000; color: #b9c2cc; padding: 8px;
+    border-radius: 6px; white-space: pre-wrap; word-break: break-all; margin: 6px 0 0; }
+  @media (prefers-reduced-motion: reduce) { dialog ol li[data-z="laeuft"]::before, .status .dot { animation: none; } }
+
   .empty { color: var(--muted); font-size: 14px; padding: 0 16px; }
   footer { color: var(--muted); font-size: 12px; text-align: center; padding: 0 16px 12px; }
 
@@ -112,6 +152,57 @@
 </main>
 <footer id="footer"></footer>
 
+<dialog id="addDialog" aria-labelledby="addTitel">
+  <form id="addForm" class="inhalt" method="dialog">
+    <h2 id="addTitel">Kamera hinzufügen</h2>
+
+    <div id="addStart" class="inhalt" style="padding:0">
+      <p>ESP32-CAM auf dem USB-Board (ESP32-CAM-MB) per USB an diesen Computer stecken. Die Seite spielt die Firmware auf,
+        bringt die Kamera ins WLAN und trägt sie hier ein.</p>
+      <div class="box warn" id="addKeinSerial" hidden>Das geht nur in Chrome oder Edge am Computer (nicht auf dem iPhone,
+        nicht in Safari oder Firefox). Öffne diese Seite dort.</div>
+      <label>Wo steht sie?
+        <input type="text" id="addLabel" placeholder="z. B. Wohnzimmer" maxlength="40" required autocomplete="off">
+        <small id="addNameInfo"></small>
+      </label>
+      <label>WLAN-Name (2,4 GHz)
+        <input type="text" id="addSsid" required autocomplete="off" autocapitalize="off" spellcheck="false">
+      </label>
+      <label>WLAN-Passwort
+        <input type="password" id="addPass" autocomplete="off">
+        <small>Geht nur an die Kamera, der Server speichert es nicht.</small>
+      </label>
+      <label class="check"><input type="checkbox" id="addFlash" checked>
+        <span>Firmware aufspielen<br><small>Löscht die Kamera komplett und spielt die Prusa-Firmware neu auf. Ohne Haken
+          wird nur das WLAN eingestellt.</small></span></label>
+      <div class="knoepfe">
+        <button type="button" id="addAbbrechen">Abbrechen</button>
+        <button type="submit" class="haupt">Per USB verbinden</button>
+      </div>
+    </div>
+
+    <div id="addLauf" class="inhalt" style="padding:0" hidden>
+      <ol>
+        <li id="sVerbinden">Verbinden <small></small></li>
+        <li id="sFlashen">Firmware aufspielen <small></small></li>
+        <li id="sWlan">WLAN einrichten <small></small></li>
+        <li id="sEintragen">Hier eintragen <small></small></li>
+      </ol>
+      <progress id="addBalken" max="100" value="0" hidden></progress>
+      <div class="box warn" id="addHinweis" hidden></div>
+      <details><summary>Details</summary><pre id="addLog"></pre></details>
+      <div class="knoepfe"><button type="button" id="addZurueck" hidden>Zurück</button></div>
+    </div>
+
+    <div id="addFertig" class="inhalt" style="padding:0" hidden>
+      <p id="addErgebnis" style="color:var(--text)"></p>
+      <p id="addMac"></p>
+      <p id="addWarnung" style="color:var(--accent)"></p>
+      <div class="knoepfe"><button type="button" id="addSchliessen" class="haupt">Zur Kamera</button></div>
+    </div>
+  </form>
+</dialog>
+
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -133,7 +224,30 @@
   function setStatus(s, text) { statusEl.dataset.s = s; statusText.textContent = text; }
   function showMsg(html) { msgText.innerHTML = html; msg.hidden = false; }
   function hideMsg() { msg.hidden = true; }
-  const label = (name) => name.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  let labels = {};        // Anzeigenamen aus kameras.conf ("Küche oben"), sonst aus dem Namen gebaut
+  const label = (name) => labels[name] || name.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // "Kamera hinzufügen" (hinzufuegen.js, wird erst beim Antippen geladen)
+  let hinzufuegen = null;
+  async function kameraHinzufuegen() {
+    if (!hinzufuegen) {
+      const m = await import("./hinzufuegen.js");
+      hinzufuegen = m.einrichten({
+        vorhandene: () => cams,
+        fertig: async (name) => {
+          store.set("cam", name);
+          history.replaceState(null, "", "#" + encodeURIComponent(name));
+          // go2rtc lädt nach dem Eintragen kurz neu
+          for (let i = 0; i < 10; i++) {
+            await new Promise((r) => setTimeout(r, 800));
+            try { const r = await fetch("api/streams", { cache: "no-store" }); if (r.ok && name in await r.json()) break; } catch {}
+          }
+          loadCams();
+        },
+      });
+    }
+    hinzufuegen.oeffnen();
+  }
 
   async function loadCams() {
     try {
@@ -145,11 +259,10 @@
       showMsg('Der Server antwortet nicht.<br><button onclick="location.reload()">Neu laden</button>');
       return;
     }
-    if (!cams.length) {
-      setStatus("error", "Keine Kameras");
-      showMsg("In go2rtc.yaml ist noch keine Kamera eingetragen.");
-      return;
-    }
+    try {
+      const r = await fetch("api/kameras", { cache: "no-store" });
+      if (r.ok) labels = Object.fromEntries((await r.json()).filter((k) => k.label).map((k) => [k.name, k.label]));
+    } catch {}
     camsEl.innerHTML = "";
     for (const name of cams) {
       const b = document.createElement("button");
@@ -158,7 +271,18 @@
       b.onclick = () => select(name);
       camsEl.appendChild(b);
     }
-    camsEl.hidden = cams.length < 2;
+    const add = document.createElement("button");
+    add.className = "add";
+    add.textContent = "+ Kamera hinzufügen";
+    add.onclick = kameraHinzufuegen;
+    camsEl.appendChild(add);
+    if (!cams.length) {
+      stop();
+      setStatus("error", "Keine Kameras");
+      showMsg('Noch keine Kamera eingetragen.<br><button id="msgAdd">Kamera hinzufügen</button>');
+      $("msgAdd").onclick = kameraHinzufuegen;
+      return;
+    }
     const fromHash = decodeURIComponent(location.hash.slice(1));
     select(cams.includes(fromHash) ? fromHash : cams.includes(store.get("cam")) ? store.get("cam") : cams[0]);
   }
@@ -167,7 +291,10 @@
     current = name;
     store.set("cam", name);
     history.replaceState(null, "", "#" + encodeURIComponent(name));
-    for (const b of camsEl.children) b.setAttribute("aria-pressed", String(b.dataset.cam === name));
+    for (const b of camsEl.querySelectorAll("button[data-cam]")) {
+      b.setAttribute("aria-pressed", String(b.dataset.cam === name));
+      if (b.dataset.cam === name) b.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
     viewer.classList.toggle("rot180", !!store.get("rot." + name, false));
     $("btnRotate").setAttribute("aria-pressed", String(!!store.get("rot." + name, false)));
     $("btnLight").setAttribute("aria-pressed", String(!!light[name]));
